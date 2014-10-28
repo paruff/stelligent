@@ -17,9 +17,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
     config.vm.box_url = "http://opscode-vm-bento.s3.amazonaws.com/vagrant/virtualbox/opscode_centos-6.5_chef-provisionerless.box"
 
 
-# config.vm.network :hostonly, "10.2.2.42"
 
-config.vm.network "private_network", ip: "10.2.2.2"
+ config.vm.network "private_network", ip: "10.2.2.2"
 
 config.vm.hostname = "si"
 
@@ -65,11 +64,6 @@ config.vm.hostname = "si"
   #
   # View the documentation for the provider you're using for more
   # information on available options.
-config.vm.provision "file", source: "index.html", destination: "/var/www/html/"
-
-#  config.vm.synced_folder "../../../../product/production/web", "/var/www/html"
-
- # config.vm.share_folder 'web', '/var/www/html', File.expand_path("index.html", File.dirname(__FILE__)), { :create => true }
 
   # Enable provisioning with chef solo, specifying a cookbooks path, roles
   # path, and data_bags path (all relative to this Vagrantfile), and adding
@@ -80,15 +74,18 @@ config.vm.provision "file", source: "index.html", destination: "/var/www/html/"
       chef.cookbooks_path = File.expand_path("../../../../chef/cookbooks", __FILE__)
       chef.data_bags_path = File.expand_path("../../../../chef/data_bags", __FILE__)
       
-      chef.add_recipe "apache2"
+#  DocumentRoot /var/www/html/
 
-# config.vm.synced_folder "../../../../product/production/web/", "/var/www/html/", type: "nfs"
-  config.vm.synced_folder "../../../../product/production/web", "/var/www/html"
+     chef.json = {
+      "apache" => {
+        "DocumentRoot" => "/var/www/html/"
+      }
+    }
+
+      chef.add_recipe "apache2"
+      chef.add_recipe "sti"
+
 
    end
-# config.vm.provision "file", source: "index.html", destination: "/var/www/html/"
-# config.vm.synced_folder "../../../../product/production/web/", "/var/www/html/", 
-#      owner: "apache", group: "root"
-#config.vm.synced_folder "../../../../product/production/web/", "/var/www/html/", type: "nfs"
 
 end
