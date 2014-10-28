@@ -1,0 +1,131 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+require 'berkshelf/vagrant'
+require 'chozo/config'
+
+module Berkshelf
+  class Config < Chozo::Config::JSON
+    class << self
+      # @return [String]
+      def path
+        File.expand_path("../../.chef/berkshelf-config.json", File.dirname(__FILE__))
+      end
+    end
+  end
+  class Berksfile
+    extend Forwardable
+
+    def load(content)
+      begin
+        @working_dir = Dir.pwd
+        Dir.chdir(File.expand_path("../../.chef", File.dirname(__FILE__))) do
+          instance_eval(content)
+        end
+      rescue => e
+        raise BerksfileReadError.new(e), "An error occurred while reading the Berksfile: #{e.to_s}"
+      end
+      self
+    end
+  end
+  class ChefAPILocation
+    class << self
+      # @return [Proc]
+      def finalizer
+        proc {
+          unless (defined? conn).nil?
+            conn.terminate if conn.alive?
+          end
+        }
+      end
+    end
+  end
+  module Vagrant
+    class << self
+      def shelf_for(env)
+        uuid = nil
+        if defined? env[:vm].uuid
+          uuid = env[:vm].uuid
+        elsif defined? env[:vm].instance_id
+          uuid = env[:vm].instance_id
+        elsif defined? env[:env].config.global.keys[:ssh].host
+          uuid = env[:env].config.global.keys[:ssh].host
+        end
+
+        return nil if uuid.nil?
+
+        File.join(Berkshelf.berkshelf_path, "vagrant", uuid)
+      end
+    end
+    module Action
+      class Install
+        def initialize(app, env)
+          @app       = app
+          @shelf     = File.expand_path("../../.chef/berkshelf/cookbooks", File.dirname(__FILE__))
+          @berksfile = Berksfile.from_file(env[:vm].config.berkshelf.berksfile_path)
+        end
+
+        def call(env)
+          if Berkshelf::Vagrant.chef_solo?(env[:vm].config)
+            Berkshelf.formatter.msg "using berks cookbook path: #{self.shelf}"
+            configure_cookbooks_path(env)
+            if !ARGV.include? '-bc' and !ARGV.include? '--berks-cache'
+              install(env)
+            end
+          end
+
+          @app.call(env)
+          rescue BerkshelfError => e
+            raise VagrantWrapperError.new(e)
+        end
+      end
+    end
+  end
+end
+
+module Vagrant
+  module Command
+    class Base
+
+      def parse_options(opts=nil)
+        # Creating a shallow copy of the arguments so the OptionParser
+        # doesn't destroy the originals.
+        argv = @argv.dup
+
+        # Default opts to a blank optionparser if none is given
+        opts ||= OptionParser.new
+
+        # Add the help option, which must be on every command.
+        opts.on_tail("-h", "--help", "Print this help") do
+          safe_puts(opts.help)
+          return nil
+        end
+
+        arguments = []
+        argv.each do |arg|
+          arguments.append arg if arg != '-bc' and arg != '--berks-cache'
+        end
+
+        opts.parse!(arguments)
+        return arguments
+      rescue OptionParser::InvalidOption
+        raise Errors::CLIInvalidOptions, :help => opts.help.chomp
+      end
+
+    end
+  end
+end
+
+if Vagrant.actions[:aws_provision].send(:index, Berkshelf::Vagrant::Action::Validate).nil?
+  Vagrant.actions[:aws_provision].insert(VagrantAWS::Action::PopulateSSH, Berkshelf::Vagrant::Action::Validate)
+  Vagrant.actions[:aws_provision].insert(Berkshelf::Vagrant::Action::Validate, Berkshelf::Vagrant::Middleware.install)
+  Vagrant.actions[:aws_provision].insert(Berkshelf::Vagrant::Action::Validate, Berkshelf::Vagrant::Middleware.upload)
+end
+
+if !defined?(VagrantSSH::Action::PopulateSSH).nil? && Vagrant.actions[:ssh_provision].send(:index, Berkshelf::Vagrant::Action::Validate).nil?
+  eval <<eos
+    Vagrant.actions[:ssh_provision].insert(VagrantSSH::Action::PopulateSSH, Berkshelf::Vagrant::Action::Validate)
+    Vagrant.actions[:ssh_provision].insert(Berkshelf::Vagrant::Action::Validate, Berkshelf::Vagrant::Middleware.install)
+    Vagrant.actions[:ssh_provision].insert(Berkshelf::Vagrant::Action::Validate, Berkshelf::Vagrant::Middleware.upload)
+eos
+end
