@@ -18,11 +18,31 @@
 #
 
 
-cookbook_file "Stellignet welcome msg" do
+directory "create apache docroot as apache" do
   action :create
-  path "#{node['apache']['docroot_dir']}/index.html"
-  source "index.html"
-  owner "apache"
-  group "apache"
-  mode "0755"
+  owner 'apache'
+  group 'apache'
+  mode '0755'
+  path "/etc/httpd/htdocs/"
+  recursive true
 end
+
+# cookbook_file "index.html" do
+#   action :create
+#   owner 'apache'
+#   group 'apache'
+#   mode '0755'
+#   path "/etc/httpd/htdocs/index.html"
+# end
+
+
+file "index.html" do
+  action :create
+  path "/etc/httpd/htdocs/index.html"
+  backup 5
+  owner "apcahe"
+  group "apache"
+  mode "0644"
+  content "<html><body>Hello Stelligent</body></html>"
+end
+
