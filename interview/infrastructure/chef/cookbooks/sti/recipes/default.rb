@@ -17,23 +17,12 @@
 # limitations under the License.
 #
 
-cookbook_file "/var/www/html/index.html" do
-  source "index.html"
-  mode '0755'
-  owner 'apache'
-  group 'apache'
-end
 
-directory "/etc/httpd/htdocs" do
-  owner 'apache'
-  group 'apache'
-  mode '0755'
+cookbook_file "Stellignet welcome msg" do
   action :create
-end
-
-cookbook_file "/etc/httpd/htdocs/index.html" do
+  path "#{node['apache']['docroot_dir']}/index.html"
   source "index.html"
-  mode '0755'
-  owner 'apache'
-  group 'apache'
+  owner "apache"
+  group "apache"
+  mode "0755"
 end
